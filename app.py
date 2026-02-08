@@ -1,15 +1,15 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import time
 
 app = Flask(__name__)
 
-HF_API_KEY = os.environ.get("HF_API_KEY")
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
-MODEL_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
-
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
 HEADERS = {
-    "Authorization": f"Bearer {HF_API_KEY}"
+    "Authorization": f"Bearer {HF_TOKEN}"
 }
 
 @app.route("/")
@@ -18,25 +18,17 @@ def home():
 
 @app.route("/ask")
 def ask():
-    text = request.args.get("text")
-
+    text = request.args.get("text", "")
     if not text:
-        return jsonify({"reply": "No question received"})
+        return jsonify({"reply": "No input received"})
 
-    payload = {
-        "inputs": text
-    }
+    payload = {"inputs": text}
 
-    response = requests.post(MODEL_URL, headers=HEADERS, json=payload)
+    for _ in range(3):  # retry logic
+        response = requests.post(API_URL, headers=HEADERS, json=payload)
+        if response.status_code == 200:
+            data = response.json()
+            return jsonify({"reply": data[0]["generated_text"]})
+        time.sleep(2)
 
-    if response.status_code != 200:
-        return jsonify({"reply": "Model busy, try again"})
-
-    data = response.json()
-
-    reply = data[0]["generated_text"]
-
-    return jsonify({"reply": reply})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    return jsonify({"reply": "Model busy, try again later"})
