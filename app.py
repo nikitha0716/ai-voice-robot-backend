@@ -1,11 +1,16 @@
 from flask import Flask, request, jsonify
-from openai import OpenAI
+import requests
 import os
 
 app = Flask(__name__)
 
-# Load API key from environment variable
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+HF_API_KEY = os.environ.get("HF_API_KEY")
+
+MODEL_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
+
+HEADERS = {
+    "Authorization": f"Bearer {HF_API_KEY}"
+}
 
 @app.route("/")
 def home():
@@ -13,24 +18,25 @@ def home():
 
 @app.route("/ask")
 def ask():
-    user_text = request.args.get("text", "")
+    text = request.args.get("text")
 
-    if not user_text:
+    if not text:
         return jsonify({"reply": "No question received"})
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_text}
-            ]
-        )
+    payload = {
+        "inputs": text
+    }
 
-        reply = response.choices[0].message.content
-        return jsonify({"reply": reply})
+    response = requests.post(MODEL_URL, headers=HEADERS, json=payload)
 
-    except Exception as e:
-        return jsonify({"reply": str(e)})
+    if response.status_code != 200:
+        return jsonify({"reply": "Model busy, try again"})
+
+    data = response.json()
+
+    reply = data[0]["generated_text"]
+
+    return jsonify({"reply": reply})
+
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=10000)
